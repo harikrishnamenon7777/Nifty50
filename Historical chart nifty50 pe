@@ -1,0 +1,96 @@
+episodes = []
+peak_i = trough_i = 0
+peak = trough = float(df.loc[0, "Close"])
+for i in range(1, len(df)):
+    value = float(df.loc[i, "Close"])
+    if value >= peak:
+        fall = (trough / peak - 1) * 100
+        if fall <= -20:
+            episodes.append({
+                "Peak Date": df.loc[peak_i, "Date"], "Peak NIFTY": peak,
+                "Peak PE": float(df.loc[peak_i, "P/E"]),
+                "Trough Date": df.loc[trough_i, "Date"], "Trough NIFTY": trough,
+                "Trough PE": float(df.loc[trough_i, "P/E"]), "Fall %": fall
+            })
+        peak_i = trough_i = i
+        peak = trough = value
+    elif value < trough:
+        trough, trough_i = value, i
+fall = (trough / peak - 1) * 100
+if fall <= -20:
+    episodes.append({
+        "Peak Date": df.loc[peak_i, "Date"], "Peak NIFTY": peak,
+        "Peak PE": float(df.loc[peak_i, "P/E"]),
+        "Trough Date": df.loc[trough_i, "Date"], "Trough NIFTY": trough,
+        "Trough PE": float(df.loc[trough_i, "P/E"]), "Fall %": fall
+    })
+
+# CHART 1 — original combined chart 
+fig, ax = plt.subplots(figsize=(17, 8))
+ax2 = ax.twinx()
+for e in episodes:
+    ax.axvspan(e["Peak Date"], e["Trough Date"], alpha=0.12, color="yellow")
+line1, = ax.plot(df["Date"], df["Close"], linewidth=1.8,
+                 label="NIFTY 50 (points)")
+line2, = ax2.plot(df["Date"], df["P/E"], color="darkorange",
+                  linestyle="--", linewidth=1.7, label="NIFTY PE")
+for level in [15, 20, 25, 30]:
+    ax2.axhline(level, linestyle=":", linewidth=0.8, alpha=0.4, color="grey")
+
+for e in episodes:
+    ax.scatter(e["Peak Date"], e["Peak NIFTY"], marker="^", s=260,
+                              zorder=7, color="green", edgecolors="white", linewidths=1.2)
+    ax.scatter(e["Trough Date"], e["Trough NIFTY"], marker="v", s=260,
+               zorder=7, color="crimson", edgecolors="white", linewidths=1.2)
+    ax.annotate(f'{e["Fall %"]:.0f}% fall',
+                (e["Trough Date"], e["Trough NIFTY"]),
+                xytext=(4, -18), textcoords="offset points",
+                fontsize=8, fontweight="bold")
+
+ax.set_title("NIFTY 50 Points and PE Ratio\nShaded areas = peak-to-trough falls of 20% or more",
+             fontsize=14, pad=14)
+ax.set_xlabel("Year")
+ax.set_ylabel("NIFTY 50 closing level (points)")
+ax2.set_ylabel("NIFTY PE ratio")
+ax.xaxis.set_major_locator(mdates.YearLocator(2))
+ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+ax.grid(True, alpha=0.22)
+legend_handles = [
+    line1, line2,
+    plt.Line2D([], [], marker="^", linestyle="None", color="green",
+               markersize=13, label="Peak before correction"),
+    plt.Line2D([], [], marker="v", linestyle="None", color="crimson",
+               markersize=13, label="Trough of correction (large marker)"),
+    plt.Line2D([], [], color="yellow", alpha=0.25, linewidth=8,
+               label="Shaded = 20%+ correction period")
+]
+ax.legend(handles=legend_handles, loc="upper left", ncol=2, fontsize=9)
+fig.tight_layout()
+fig.savefig(out_dir / "NIFTY_20pct_Correction_Chart.png", dpi=220, bbox_inches="tight")
+plt.show()
+
+# CHART 2 — bar chart
+fig, ax = plt.subplots(figsize=(12, 6.5))
+bar_labels = [f'{e["Peak Date"]:%Y}–{e["Trough Date"]:%y}' for e in episodes]
+drops = [abs(e["Fall %"]) for e in episodes]
+bars = ax.barh(bar_labels, drops, height=0.62)
+ax.invert_yaxis()
+ax.set_xlim(0, max(drops) * 1.48 if drops else 10)
+ax.set_xlabel("NIFTY 50 peak-to-trough decline (%)")
+ax.set_title("NIFTY 50's major corrections \n P/E at market peak → P/E at market bottom",
+             fontsize=13, pad=14)
+ax.grid(axis="x", linestyle="--", alpha=0.3)
+ax.set_axisbelow(True)
+for bar, e, drop in zip(bars, episodes, drops):
+    ax.text(drop + 0.8, bar.get_y() + bar.get_height()/2,
+            f'−{drop:.1f}%   |   P/E {e["Peak PE"]:.1f} → {e["Trough PE"]:.1f}',
+            va="center", fontsize=9)
+ax.spines["top"].set_visible(False)
+ax.spines["right"].set_visible(False)
+fig.tight_layout()
+fig.savefig(out_dir / "NIFTY_20pct_Corrections_Bar_Chart.png", dpi=220, bbox_inches="tight")
+plt.show()
+
+pd.DataFrame(episodes).to_excel(out_dir / "NIFTY_20pct_Correction_Events.xlsx", index=False)
+print(f"Found {len(episodes)} correction(s) of 20% or more.")
+print(f"All outputs saved in: {out_dir}")
